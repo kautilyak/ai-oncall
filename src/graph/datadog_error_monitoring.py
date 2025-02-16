@@ -1,27 +1,24 @@
-from src.models.error_analysis_state import AnalysisState   
+from typing import Optional, List
+
 from langgraph.graph import StateGraph, START, END
+from pydantic import Field, BaseModel
+
 from src.tools.tool_selection import select_tools
-from src.tools.datadog_integration import gather_datadog_logs, gather_api_docs
-from src.tools.error_analysis import perform_analysis  
 from datetime import datetime, timedelta
+from src.tools.datadog_integration import get_all_errors, fetch_past_error_logs, fetch_logs_by_trace_id
+from src.models.error_analysis_state import ErrorAnalysisInput, ErrorAnalysisOutput  
 
-# Define the workflow graph
-dd_error_monitoring_workflow = StateGraph(AnalysisState)
 
-# Add nodes to the graph
-dd_error_monitoring_workflow.add_node("start", START)   
-dd_error_monitoring_workflow.add_node("tool_selection", tool_selection)
-dd_error_monitoring_workflow.add_node("gather_datadog", gather_datadog_logs)
-dd_error_monitoring_workflow.add_node("gather_api_docs", gather_api_docs)
-dd_error_monitoring_workflow.add_node("analysis", perform_analysis)
-dd_error_monitoring_workflow.add_node("end", END)
+class AnalysisState(BaseModel): 
+    selected_tools: List[str] = Field(description="List of selected tools")
+    error_message: str = ""
+    stack_trace: str = ""
+    trace_id: Optional[str] = None
+    related_logs: str = ""
+    api_docs: str = ""
+    analysis: Optional[str] = None
+    analysis_output: Optional[ErrorAnalysisOutput] = None
 
-# Define the edges
-dd_error_monitoring_workflow.add_edge(START, "tool_selection")
-dd_error_monitoring_workflow.add_edge("tool_selection", "gather_datadog")
-dd_error_monitoring_workflow.add_edge("gather_datadog", "gather_api_docs")
-dd_error_monitoring_workflow.add_edge("gather_api_docs", "analysis")
-dd_error_monitoring_workflow.add_edge("analysis", END)
 
 TASK_DESCRIPTION = """
 Fetching Datadog Logs and API Docs to resolve the error incident.
@@ -38,12 +35,8 @@ def gather_datadog_logs(state: AnalysisState) -> AnalysisState:
     if "datadog" in state.selected_tools:
         to_time = int(datetime.now().timestamp())
         from_time = int((datetime.now() - timedelta(days=1)).timestamp())
-        logs_data = fetch_logs_from_datadog(
-            query=state.error_message, 
-            from_time=from_time, 
-            to_time=to_time
-        )
-        state.recent_logs = logs_data.get('logs', '')
+        related_logs = fetch_logs_by_trace_id(trace_id=state.trace_id)
+        state.recent_logs = related_logs.get('logs', '')
     return state
 
 def gather_api_docs(state: AnalysisState) -> AnalysisState:
@@ -58,10 +51,32 @@ def perform_analysis(state: AnalysisState) -> AnalysisState:
         error_message=state.error_message,
         stack_trace=state.stack_trace,
         trace_id=state.trace_id
+        related_logs=state.related_logs,
+        api_docs=state.api_docs 
     )
     state.analysis = analyze_error(error_analysis_input)
     return state
 
+
+
+# Define the workflow graph
+dd_error_monitoring_workflow = StateGraph(AnalysisState)
+
+
+# Add nodes to the graph
+dd_error_monitoring_workflow.add_node("start", START)   
+dd_error_monitoring_workflow.add_node("tool_selection", tool_selection)
+dd_error_monitoring_workflow.add_node("gather_datadog", gather_datadog_logs)
+dd_error_monitoring_workflow.add_node("gather_api_docs", gather_api_docs)
+dd_error_monitoring_workflow.add_node("analysis", perform_analysis)
+dd_error_monitoring_workflow.add_node("end", END)
+
+# Define the edges
+dd_error_monitoring_workflow.add_edge(START, "tool_selection")
+dd_error_monitoring_workflow.add_edge("tool_selection", "gather_datadog")
+dd_error_monitoring_workflow.add_edge("gather_datadog", "gather_api_docs")
+dd_error_monitoring_workflow.add_edge("gather_api_docs", "analysis")
+dd_error_monitoring_workflow.add_edge("analysis", END)
 
 # Compile the graph
 dd_error_workflow = dd_error_monitoring_workflow.compile()

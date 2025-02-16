@@ -1,26 +1,30 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field   
 
-class AnalysisState(BaseModel): 
-    selected_tools: List[str] = Field(default_factory=list)
-    error_message: str = ""
-    stack_trace: str = ""
-    trace_id: Optional[str] = None
-    recent_logs: str = ""
-    api_docs: str = ""
-    analysis: Optional[str] = None
-    analysis_output: Optional[ErrorAnalysisOutput] = None
+
+class LogData(BaseModel):
+    trace_id: str = Field(default="unknown")
+    message: str = Field(default="")
+    timestamp: str = Field(default="")
+    service: str = Field(default="unknown")
+    error_code: str = Field(default="unknown")
+    error_type: str = Field(default="unknown")
+    resolution: Optional[str] = Field(default="unknown")
 
 class ErrorAnalysisInput(BaseModel):
     error_message: str = Field(..., description="The error message to analyze")
     stack_trace: str = Field(..., description="The associated stack trace")
     trace_id: Optional[str] = Field(None, description="Optional trace ID for fetching related logs")
+    recent_logs: Optional[List[LogData]] = Field(None, description="List of recent logs")
+    api_docs: Optional[str] = Field(None, description="API documentation")  
+
 
 class ErrorAnalysisData(BaseModel):
+    error_code: str
     error_message: str
     stack_trace: str
-    historical_data: str
-    recent_logs: str 
+    historical_data: List[LogData]
+    recent_logs: List[LogData] 
     api_docs: str
 
 class ErrorAnalysisOutput(BaseModel):
