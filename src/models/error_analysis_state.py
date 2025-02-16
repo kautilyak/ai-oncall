@@ -10,6 +10,10 @@ class LogData(BaseModel):
     service: str = Field(default="unknown")
     error_code: str = Field(default="unknown")
     error_type: str = Field(default="unknown")
+    stack_trace: str = Field(default="unknown")
+    host: str = Field(default="unknown")
+    environment: str = Field(default="unknown")
+    additional_context: dict = Field(default={})
     resolution: Optional[str] = Field(default="unknown")
 
 

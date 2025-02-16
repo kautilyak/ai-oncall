@@ -15,10 +15,11 @@ prompt_template = PromptTemplate(
         "You are an AI assistant that selects the appropriate tools based on user queries.\n\n"
         "Task Description:\n{task_description}\n\n"
         "Available Tools:\n"
-        "1. Vector Store Search: For historical error data and resolutions.\n"
-        "2. Datadog Logs Fetcher: For real-time logs and traces.\n"
-        "3. API Documentation Retriever: For fetching relevant API documentation.\n\n"
-        "Determine which tools are necessary to address the user's query and provide a brief explanation for each selection."
+        "1. vector_store_search: For historical error data and resolutions.\n"
+        "2. datadog_fetch: For real-time logs and traces.\n"
+        "3. retrieve_knowledge: For fetching relevant API documentation.\n\n"
+        "Determine which tools are necessary to address the user's query and provide a brief explanation for each "
+        "selection."
     )
 )
 
@@ -41,11 +42,11 @@ def select_tools(task_description: str) -> List[str]:
 
     # Parse the response to extract selected tools
     selected_tools = []
-    if "Vector Store Search" in tool_selection_response:
+    if "vector_store_search" in tool_selection_response:
         selected_tools.append("vector_store")
-    if "Datadog Logs Fetcher" in tool_selection_response:
+    if "datadog_fetch" in tool_selection_response:
         selected_tools.append("datadog")
-    if "API Documentation Retriever" in tool_selection_response:
+    if "retrieve_knowledge" in tool_selection_response:
         selected_tools.append("api_docs")
 
     return selected_tools

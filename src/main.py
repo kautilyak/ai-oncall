@@ -18,12 +18,12 @@ def process_error(error_query: ErrorQuery):
     Process the user's query to analyze errors and suggest resolutions.
 
     Args:
-        user_query (str): The user's input query regarding an error or issue.
+        error_query (ErrorQuery): The input query regarding an error or issue.
     """
 
     # Initialize state
     initial_state = AnalysisState(error_code=error_query.code,
-                                error_message=error_query.message,
+                                  error_message=error_query.message,
                                   stack_trace=error_query.stack_trace if error_query.stack_trace is not None else None,
                                   trace_id=error_query.trace_id if error_query.trace_id is not None else None)
 
