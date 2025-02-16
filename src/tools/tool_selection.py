@@ -10,10 +10,10 @@ llm = ChatOllama(model_name="llama3.2", temperature=0)
 
 # Define the prompt template for tool selection
 prompt_template = PromptTemplate(
-    input_variables=["user_query"],
+    input_variables=["task_description"],
     template=(
         "You are an AI assistant that selects the appropriate tools based on user queries.\n\n"
-        "User Query:\n{user_query}\n\n"
+        "Task Description:\n{task_description}\n\n"
         "Available Tools:\n"
         "1. Vector Store Search: For historical error data and resolutions.\n"
         "2. Datadog Logs Fetcher: For real-time logs and traces.\n"
@@ -25,18 +25,18 @@ prompt_template = PromptTemplate(
 # Create the LLMChain for tool selection
 tool_selection_chain = LLMChain(llm=llm, prompt=prompt_template)
 
-def select_tools(user_query: str) -> List[str]:
+def select_tools(task_description: str) -> List[str]:
     """
     Analyze the user query and select appropriate tools.
 
     Args:
-        user_query (str): The user's query regarding an error or issue.
+        task_description (str): The user's query regarding an error or issue.
 
     Returns:
         List[str]: A list of selected tools to address the query.
     """
     # Run the tool selection chain
-    tool_selection_response = tool_selection_chain.run(user_query=user_query)
+    tool_selection_response = tool_selection_chain.invoke(task_description=task_description)
 
     # Parse the response to extract selected tools
     selected_tools = []
