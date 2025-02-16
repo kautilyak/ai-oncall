@@ -3,17 +3,18 @@
 from langchain_ollama import ChatOllama
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.schema import Document
 from typing import List, Dict, Optional
-from src.tools.vector_store import search_logs
-from src.tools.datadog_integration import fetch_logs_by_trace_id, get_all_errors
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 from langchain.output_parsers import PydanticOutputParser
-from src.models.error_analysis_state import ErrorAnalysisOutput, ErrorAnalysisInput
 
-# Initialize the OpenAI LLM
-llm = ChatOllama(model_name="llama3.2", temperature=0.2)
+from src.models.error_analysis_state import ErrorAnalysisOutput, ErrorAnalysisInput
+from src.tools.vector_store import vector_store
+from src.tools.datadog_integration import DatadogLogFetcher
+
+# Initialize the Ollama LLM and DatadogLogFetcher
+llm = ChatOllama(model="llama3.2", temperature=0.2)
+datadog_fetcher = DatadogLogFetcher()
 
 # Create the output parser
 output_parser = PydanticOutputParser(pydantic_object=ErrorAnalysisOutput)
@@ -24,13 +25,14 @@ prompt_template = PromptTemplate(
         "You are an AI assistant specialized in system error analysis.\n\n"
         "Error Message:\n{error_message}\n\n"
         "Stack Trace:\n{stack_trace}\n\n"
-        "Historical Data:\n{historical_data}\n\n"
-        "Related logs:\n{related_logs}\n\n"
-        "API Documentation:\n{api_docs}\n\n"
-        "Based on the above information, provide a detailed analysis of the error.\n\n"
+        "Service Information:\n{service_info}\n\n"
+        "Historical Similar Errors:\n{historical_data}\n\n"
+        "Related Trace Logs:\n{related_logs}\n\n"
+        "Based on the above information, provide a detailed analysis of the error.\n"
+        "Consider patterns in historical errors and the current service context.\n\n"
         "{format_instructions}\n"
     ),
-    input_variables=["error_message", "stack_trace", "historical_data", "related_logs", "api_docs"],
+    input_variables=["error_message", "stack_trace", "service_info", "historical_data", "related_logs"],
     partial_variables={"format_instructions": output_parser.get_format_instructions()}
 )
 
@@ -41,43 +43,69 @@ error_analysis_chain = LLMChain(
     output_parser=output_parser
 )
 
+def format_historical_data(historical_results: List[Dict]) -> str:
+    """Format historical error data for the prompt."""
+    formatted_data = []
+    for result in historical_results:
+        status = f"[{result.get('resolution_status', 'pending').upper()}]"
+        resolution = f"Resolution: {result.get('resolution_notes', 'No resolution notes yet')}"
+        error_info = f"Error: {result.get('error_type')} in {result.get('service')}"
+        timestamp = f"Occurred: {result.get('timestamp')}"
+        
+        formatted_data.append(f"{status}\n{error_info}\n{timestamp}\n{resolution}\n")
+    
+    return "\n".join(formatted_data) if formatted_data else "No historical data available."
 
 def analyze_error(error_analysis_input: ErrorAnalysisInput) -> ErrorAnalysisOutput:
     """
     Analyze an error using the LLM and provide insights and resolution suggestions.
-
+    
+    This function:
+    1. Retrieves similar historical errors using hybrid search
+    2. Fetches related logs from the same trace
+    3. Combines all information for LLM analysis
+    4. Returns structured analysis output
+    
     Args:
-        error_analysis_input (ErrorAnalysisInput): Details about the error.
-
+        error_analysis_input (ErrorAnalysisInput): Details about the error to analyze
+        
     Returns:
-        str: The analysis and suggested resolution.
+        ErrorAnalysisOutput: Structured analysis including root cause and resolution steps
     """
-
-    # Retrieve historical data from the vector store
-    historical_data_docs = search_logs(query=error_analysis_input.error_message, k=5)
-    historical_data = "\n\n".join([doc.page_content for doc in historical_data_docs])
-
-    # Fetch related logs from Datadog -> logs associated with the same trace id
-    if error_analysis_input.trace_id:
-        trace_data = fetch_logs_by_trace_id(error_analysis_input.trace_id)
-        related_logs = trace_data.get('logs', '')
-    else:
-        # Define a time range for related logs (e.g., last 24 hours)
-        to_time = datetime.now()
-        from_time = (datetime.now() - timedelta(days=1))
-        logs_data = get_all_errors(from_time, to_time)
-        related_logs = logs_data.get('logs', '')
-
-    # Placeholder for API documentation retrieval
-    api_docs = "Relevant API documentation content."
-
-    # Run the error analysis chain
-    analysis = error_analysis_chain.invoke(
-        error_message=error_analysis_input.error_message,
-        stack_trace=error_analysis_input.stack_trace,
-        historical_data=historical_data,
-        related_logs=related_logs,
-        api_docs=error_analysis_input.api_docs
+    # Prepare service information
+    service_info = f"Service: {error_analysis_input.service}\nEnvironment: {error_analysis_input.environment}"
+    
+    # Search for similar historical errors using hybrid search
+    historical_results = vector_store.hybrid_search(
+        query=f"{error_analysis_input.error_type} {error_analysis_input.error_message}",
+        metadata_filter={
+            "service": error_analysis_input.service
+        } if error_analysis_input.service else None,
+        k=5
     )
-
+    
+    # Format historical data
+    historical_data = format_historical_data(historical_results)
+    
+    # Fetch related logs from the same trace
+    related_logs = []
+    if error_analysis_input.trace_id:
+        trace_logs = datadog_fetcher.fetch_logs_by_trace_id(
+            trace_id=error_analysis_input.trace_id,
+            hours=1
+        )
+        related_logs = [
+            f"[{log.timestamp}] {log.service}: {log.message}"
+            for log in trace_logs
+        ]
+    
+    # Run the error analysis chain
+    analysis = error_analysis_chain.invoke({
+        "error_message": error_analysis_input.error_message,
+        "stack_trace": error_analysis_input.stack_trace or "No stack trace available",
+        "service_info": service_info,
+        "historical_data": historical_data,
+        "related_logs": "\n".join(related_logs) if related_logs else "No related logs found"
+    })
+    
     return analysis
