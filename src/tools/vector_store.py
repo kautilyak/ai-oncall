@@ -1,10 +1,6 @@
 from langchain.vectorstores import Pinecone
-from langchain_pinecone import PineconeEmbeddings
 from langchain.schema import Document
 from typing import List
-
-# Initialize the Pinecone embeddings    
-embeddings = PineconeEmbeddings()
 
 # Initialize the Pinecone vector store
 # Initialize Pinecone
@@ -24,7 +20,8 @@ def index_logs(logs: List[Document], batch_size: int = 100):
     # Process documents in batches for better performance
     for i in range(0, len(logs), batch_size):
         batch = logs[i:i + batch_size]
-        index.upsert(batch, namespace="error-logs") 
+        index.upsert(batch, namespace="error-logs")
+
 
 def search_logs(query: str, k: int = 5, filter: dict = None) -> List[Document]:
     """
@@ -44,4 +41,4 @@ def search_logs(query: str, k: int = 5, filter: dict = None) -> List[Document]:
         include_metadata=True,
         filter=filter
     )
-    return [Document(page_content=result['text'], metadata=result['metadata']) for result in results['matches']]    
+    return [Document(page_content=result['text'], metadata=result['metadata']) for result in results['matches']]

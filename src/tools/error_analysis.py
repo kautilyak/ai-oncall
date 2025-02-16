@@ -10,8 +10,7 @@ from src.tools.datadog_integration import fetch_logs_by_trace_id, get_all_errors
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 from langchain.output_parsers import PydanticOutputParser
-from src.models.error_analysis_state import ErrorAnalysisOutput, ErrorAnalysisInput, ErrorAnalysisData
-
+from src.models.error_analysis_state import ErrorAnalysisOutput, ErrorAnalysisInput
 
 # Initialize the OpenAI LLM
 llm = ChatOllama(model_name="llama3.2", temperature=0.2)
@@ -26,12 +25,12 @@ prompt_template = PromptTemplate(
         "Error Message:\n{error_message}\n\n"
         "Stack Trace:\n{stack_trace}\n\n"
         "Historical Data:\n{historical_data}\n\n"
-        "Recent Logs:\n{recent_logs}\n\n"
+        "Related logs:\n{related_logs}\n\n"
         "API Documentation:\n{api_docs}\n\n"
         "Based on the above information, provide a detailed analysis of the error.\n\n"
         "{format_instructions}\n"
     ),
-    input_variables=["error_message", "stack_trace", "historical_data", "recent_logs", "api_docs"],
+    input_variables=["error_message", "stack_trace", "historical_data", "related_logs", "api_docs"],
     partial_variables={"format_instructions": output_parser.get_format_instructions()}
 )
 
@@ -42,14 +41,13 @@ error_analysis_chain = LLMChain(
     output_parser=output_parser
 )
 
+
 def analyze_error(error_analysis_input: ErrorAnalysisInput) -> ErrorAnalysisOutput:
     """
     Analyze an error using the LLM and provide insights and resolution suggestions.
 
     Args:
-        error_message (str): The error message to analyze.
-        stack_trace (str): The associated stack trace.
-        trace_id (str, optional): The trace ID for fetching related logs. Defaults to None.
+        error_analysis_input (ErrorAnalysisInput): Details about the error.
 
     Returns:
         str: The analysis and suggested resolution.
@@ -59,36 +57,27 @@ def analyze_error(error_analysis_input: ErrorAnalysisInput) -> ErrorAnalysisOutp
     historical_data_docs = search_logs(query=error_analysis_input.error_message, k=5)
     historical_data = "\n\n".join([doc.page_content for doc in historical_data_docs])
 
-    # Fetch recent logs from Datadog
+    # Fetch related logs from Datadog -> logs associated with the same trace id
     if error_analysis_input.trace_id:
         trace_data = fetch_logs_by_trace_id(error_analysis_input.trace_id)
-        recent_logs = trace_data.get('logs', '')
+        related_logs = trace_data.get('logs', '')
     else:
-        # Define a time range for recent logs (e.g., last 24 hours)
-        to_time = int(datetime.now().timestamp())
-        from_time = int((datetime.now() - timedelta(days=1)).timestamp())
+        # Define a time range for related logs (e.g., last 24 hours)
+        to_time = datetime.now()
+        from_time = (datetime.now() - timedelta(days=1))
         logs_data = get_all_errors(from_time, to_time)
-        recent_logs = logs_data.get('logs', '')
+        related_logs = logs_data.get('logs', '')
 
     # Placeholder for API documentation retrieval
     api_docs = "Relevant API documentation content."
 
-    # Validate analysis data using Pydantic model
-    analysis_data = ErrorAnalysisData(
+    # Run the error analysis chain
+    analysis = error_analysis_chain.invoke(
         error_message=error_analysis_input.error_message,
         stack_trace=error_analysis_input.stack_trace,
         historical_data=historical_data,
-        recent_logs=recent_logs if recent_logs else logs_data,
-        api_docs=api_docs
-    )
-
-    # Run the error analysis chain
-    analysis = error_analysis_chain.invoke(
-        error_message=analysis_data.error_message,
-        stack_trace=analysis_data.stack_trace,
-        historical_data=analysis_data.historical_data,
-        recent_logs=analysis_data.recent_logs,
-        api_docs=analysis_data.api_docs
+        related_logs=related_logs,
+        api_docs=error_analysis_input.api_docs
     )
 
     return analysis

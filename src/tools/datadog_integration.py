@@ -5,10 +5,13 @@ from datadog_api_client.v2.api.logs_api import LogsApi
 from datadog_api_client.v2.models import LogsSort, LogsListRequest, LogsQueryFilter
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
+
+from src.models.error_analysis_state import LogData
+
 
 # get all errors for a time range
-def get_all_errors(start_time: datetime, end_time: datetime):
+def get_all_errors(start_time: datetime, end_time: datetime) -> List[LogData]:
     """
     Get all errors for a given time range from Datadog.
 
@@ -18,20 +21,20 @@ def get_all_errors(start_time: datetime, end_time: datetime):
 
     Returns:
         list: A list of errors for the given time range.
-    """ 
+    """
     configuration = Configuration()
     with ApiClient(configuration) as api_client:
         api_instance = LogsApi(api_client)
 
         # Define the time range for the query
-        now = datetime.utcnow() 
+        now = datetime.utcnow()
 
         # Create the filter for the query
         filter = LogsQueryFilter(
             query=f'@error',
             _from=start_time.isoformat() + "Z",
             to=now.isoformat() + "Z"
-        )   
+        )
 
         # Create the request
         request = LogsListRequest(
@@ -48,42 +51,39 @@ def get_all_errors(start_time: datetime, end_time: datetime):
             return []
 
 
-
-
-
-
-def fetch_past_error_logs(self, hours: int = 24) -> list[LogData]:
-        """
+def fetch_past_error_logs(self, hours: int = 24) -> List[LogData]:
+    """
         Fetch past error logs from Datadog and store them in Pinecone.
         """
-        with ApiClient(self.configuration) as api_client:
-            api_instance = LogsApi(api_client)
-            now = datetime.utcnow()
-            start_time = now - timedelta(hours=hours)
-            filter = LogsQueryFilter(query='@status:error', _from=start_time.isoformat() + "Z", to=now.isoformat() + "Z")
-            request = LogsListRequest(filter=filter, sort=LogsSort("timestamp"))
-            
-            try:
-                response = api_instance.list_logs(body=request)
-                logs = response.data
-                
-                for log in logs:
-                    log_data = LogData(
-                        trace_id=log.attributes.get("trace_id", "unknown"),
-                        message=log.attributes.get("message", ""),
-                        timestamp=log.attributes.get("timestamp", ""),
-                        service=log.attributes.get("service", "unknown"),
-                        error_code=log.attributes.get("error.code", "unknown"),
-                        error_type=log.attributes.get("error.type", "unknown")
-                    )
-                    store_vector(log_data.dict())
-                
-                return logs
-            except Exception as e:
-                print(f"Error fetching logs: {e}")
-                return []
+    with ApiClient(self.configuration) as api_client:
+        api_instance = LogsApi(api_client)
+        now = datetime.utcnow()
+        start_time = now - timedelta(hours=hours)
+        filter = LogsQueryFilter(query='@status:error', _from=start_time.isoformat() + "Z", to=now.isoformat() + "Z")
+        request = LogsListRequest(filter=filter, sort=LogsSort("timestamp"))
 
-def fetch_logs_by_trace_id(trace_id: str, hours: int = 1):
+        try:
+            response = api_instance.list_logs(body=request)
+            logs = response.data
+
+            for log in logs:
+                log_data = LogData(
+                    trace_id=log.attributes.get("trace_id", "unknown"),
+                    message=log.attributes.get("message", ""),
+                    timestamp=log.attributes.get("timestamp", ""),
+                    service=log.attributes.get("service", "unknown"),
+                    error_code=log.attributes.get("error.code", "unknown"),
+                    error_type=log.attributes.get("error.type", "unknown")
+                )
+                store_vector(log_data.dict())
+
+            return logs
+        except Exception as e:
+            print(f"Error fetching logs: {e}")
+            return []
+
+
+def fetch_logs_by_trace_id(trace_id: str, hours: int = 1) -> List[LogData]:
     """
     Fetch logs associated with a specific trace ID from Datadog.
 
