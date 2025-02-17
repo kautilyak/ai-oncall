@@ -6,11 +6,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Datadog Configuration
-class DatadogConfig(BaseModel):
-    """Configuration for Datadog API."""
-    api_key: str
-    app_key: str
-
 datadog_config = Configuration(
     api_key={
         'apiKeyAuth': os.getenv('DATADOG_API_KEY'),  # Datadog API key from env
@@ -23,10 +18,12 @@ class PineconeConfig(BaseModel):
     """Configuration for Pinecone vector database."""
     api_key: str
     environment: str
-    index_name: str = "error-logs"
+    index_name: str = "error-logs",
+    host: str
 
 pinecone_config = PineconeConfig(
     api_key=os.getenv('PINECONE_API_KEY'),
     environment=os.getenv('PINECONE_ENVIRONMENT'),
-    index_name=os.getenv('PINECONE_INDEX_NAME', 'error-logs')
+    index_name=os.getenv('PINECONE_INDEX_NAME', 'error-logs'),
+    host=os.getenv('PINECONE_HOST')
 )

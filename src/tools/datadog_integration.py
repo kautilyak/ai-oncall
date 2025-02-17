@@ -66,39 +66,46 @@ class DatadogLogFetcher:
                 )
                 return [
                     LogData(
-                        trace_id=log.attributes.get("trace_id", "unknown"),
-                        message=log.attributes.get("message", ""),
-                        timestamp=log.attributes.get("timestamp", ""),
-                        service=log.attributes.get("service", "unknown"),
-                        error_code=log.attributes.get("error.code", "unknown"),
-                        error_type=log.attributes.get("error.type", "unknown"),
-                        stack_trace=log.attributes.get("error.stack", ""),
-                        host=log.attributes.get("host", "unknown"),
-                        environment=log.attributes.get("env", "unknown"),
-                        additional_context=self._extract_additional_context(log.attributes)
-                    ) 
-                    for log in response.data
+                        trace_id=log.attributes.get("trace_id") if hasattr(log, 'attributes') else "unknown",
+                        message=log.attributes.get("message") if hasattr(log, 'attributes') else "",
+                        timestamp=str(log.attributes.get("timestamp")) if hasattr(log, 'attributes') else "",
+                        service=log.attributes.get("service", "unknown") if hasattr(log, 'attributes') else "unknown",
+                        error_code=log.attributes.get("error.code") if hasattr(log, 'attributes') else "unknown",
+                        error_type=log.attributes.get("error.type") if hasattr(log, 'attributes') else "unknown",
+                        stack_trace=log.attributes.get("error.stack") if hasattr(log, 'attributes') else "",
+                        host=log.attributes.get("hostname") if hasattr(log, 'attributes') else "unknown",
+                        environment=log.attributes.get("env") if hasattr(log, 'attributes') else "unknown",
+                        # additional_context=self._extract_additional_context(log.attributes) if hasattr(log, 'attributes') else {}
+                    )
+                    for log in (response.data if hasattr(response, 'data') else [])
                 ]
         except Exception as e:
             print(f"Error fetching logs: {e}")
             return []
 
-    def _extract_additional_context(self, attributes: Dict) -> Dict:
+    def _extract_additional_context(self, attributes) -> Dict:
         """Extract additional context from log attributes that might be useful for error analysis."""
         context = {}
         
+        if not attributes:
+            return context
+            
         # Extract any custom tags
-        for key, value in attributes.items():
-            if key.startswith("custom.") or key.startswith("usr."):
-                context[key] = value
-        
-        # Extract request context if available
-        if "http.url" in attributes:
-            context["http_url"] = attributes["http.url"]
-        if "http.method" in attributes:
-            context["http_method"] = attributes["http.method"]
-        if "http.status_code" in attributes:
-            context["http_status_code"] = attributes["http.status_code"]
+        try:
+            # Handle attributes as a LogAttributes object
+            for key in dir(attributes):
+                if key.startswith("custom_") or key.startswith("usr_"):
+                    value = getattr(attributes, key)
+                    context[key] = value
+            
+            # Extract request context if available
+            http_fields = ["http_url", "http_method", "http_status_code"] 
+            for field in http_fields:
+                if hasattr(attributes, field):
+                    context[field] = getattr(attributes, field)
+                    
+        except Exception as e:
+            print(f"Error extracting additional context: {e}")
             
         return context
 

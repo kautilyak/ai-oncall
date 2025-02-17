@@ -2,7 +2,7 @@ import os
 from typing import Dict, List, Optional, Union
 import pinecone
 from langchain_ollama import OllamaEmbeddings
-from langchain.vectorstores import Pinecone
+from langchain_pinecone import PineconeVectorStore, PineconeEmbeddings
 from datetime import datetime
 import hashlib
 import json
@@ -12,29 +12,27 @@ from src.models.error_analysis_state import LogData
 
 
 class VectorStore:
-    def __init__(self, index_name: str = "error-logs"):
-        # Initialize Pinecone
-        pinecone.init(
+    def __init__(self, index_name: str = "datadoglogs"):
+        # Initialize Pinecone client
+        # Initialize Pinecone client and create index if needed
+        pinecone_client = pinecone.Pinecone(
             api_key=pinecone_config.api_key,
-            environment=pinecone_config.environment
+            # environment=pinecone_config.environment,
+            host=pinecone_config.host,
         )
+
+        self.pc_index = pinecone_client.Index(index_name, host=pinecone_config.host)
         
-        # Create index if it doesn't exist
-        if index_name not in pinecone.list_indexes():
-            pinecone.create_index(
-                name=index_name,
-                dimension=4096,  # Ollama's llama2 embedding dimension
-                metric="cosine"
-            )
+        # if index_name not in [index.name for index in pinecone_client.list_indexes()]:
+        #     pinecone_client.create_index(
+        #         name=index_name,
+        #         dimension=4096,  # Ollama's llama embedding dimension
+        #         metric="cosine"
+        #     )
         
-        self.index_name = index_name
-        self.embeddings = OllamaEmbeddings(
-            model="llama3.2"
-        )
-        self.vectorstore = Pinecone.from_existing_index(
-            index_name=index_name,
-            embedding=self.embeddings
-        )
+        # Initialize embeddings and vector store
+        self.embeddings = PineconeEmbeddings(model="multilingual-e5-large")
+        self.vectorstore = PineconeVectorStore(index=self.pc_index, embedding=self.embeddings)
 
     def _generate_vector_id(self, log: Dict) -> str:
         """Generate a unique, deterministic ID for a log entry."""
