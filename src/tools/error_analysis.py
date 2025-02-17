@@ -36,12 +36,8 @@ prompt_template = PromptTemplate(
     partial_variables={"format_instructions": output_parser.get_format_instructions()}
 )
 
-# Create the LLMChain with the output parser
-error_analysis_chain = LLMChain(
-    llm=llm,
-    prompt=prompt_template,
-    output_parser=output_parser
-)
+# Create the analysis chain using LCEL
+error_analysis_chain = prompt_template | llm | output_parser
 
 def format_historical_data(historical_results: List[Dict]) -> str:
     """Format historical error data for the prompt."""
@@ -87,25 +83,21 @@ def analyze_error(error_analysis_input: ErrorAnalysisInput) -> ErrorAnalysisOutp
     # Format historical data
     historical_data = format_historical_data(historical_results)
     
-    # Fetch related logs from the same trace
-    related_logs = []
-    if error_analysis_input.trace_id:
-        trace_logs = datadog_fetcher.fetch_logs_by_trace_id(
-            trace_id=error_analysis_input.trace_id,
-            hours=1
-        )
-        related_logs = [
-            f"[{log.timestamp}] {log.service}: {log.message}"
-            for log in trace_logs
-        ]
+    # Format related logs
+    related_logs_text = ""
+    if error_analysis_input.related_logs:
+        related_logs_text = "\n".join([
+            f"[{log.get('timestamp', 'unknown')}] {log.get('service', 'unknown')}: {log.get('message', '')}"
+            for log in error_analysis_input.related_logs
+        ])
     
     # Run the error analysis chain
-    analysis = error_analysis_chain.invoke({
+    result = error_analysis_chain.invoke({
         "error_message": error_analysis_input.error_message,
         "stack_trace": error_analysis_input.stack_trace or "No stack trace available",
         "service_info": service_info,
         "historical_data": historical_data,
-        "related_logs": "\n".join(related_logs) if related_logs else "No related logs found"
+        "related_logs": related_logs_text or "No related logs found"
     })
     
-    return analysis
+    return result

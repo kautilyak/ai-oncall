@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import logging
 from dotenv import load_dotenv
 import ddtrace
-from src.tools.datadog_integration import DatadogLogFetcher
+from ..tools.datadog_integration import DatadogLogFetcher
 
 load_dotenv()
 ddtrace.patch(logging=True)
@@ -24,7 +24,7 @@ def load_logs_to_vectordb():
     try:
         datadog_fetcher = DatadogLogFetcher()
         # Fetch and store logs from the past 24 hours
-        logs = datadog_fetcher.fetch_past_error_logs_and_store(hours=76)
+        logs = datadog_fetcher.fetch_past_error_logs_and_store(hours=5)
         
         if logs:
             print(f"Successfully loaded {len(logs)} logs into vector database")

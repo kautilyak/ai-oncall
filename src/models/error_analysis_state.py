@@ -23,8 +23,9 @@ class ErrorAnalysisInput(BaseModel):
     error_message: str = Field(..., description="The error message to analyze")
     stack_trace: str = Field(..., description="The associated stack trace")
     trace_id: Optional[str] = Field(None, description="Optional trace ID for fetching related logs")
+    service: Optional[str] = Field(None, description="Service name")
     related_logs: Optional[List[LogData]] = Field(None, description="List of recent logs")
-    api_docs: Optional[str] = Field(None, description="API documentation")
+    service_docs: Optional[dict] = Field(None, description="Service documentation")
 
 
 # Output Model for the Error Analysis Graph

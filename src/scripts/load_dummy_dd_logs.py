@@ -9,8 +9,8 @@ load_dotenv()
 
 from datadog_api_client import ApiClient
 from datadog_api_client.v2.api.logs_api import LogsApi
-from src.config import datadog_config
-from src.models.error_analysis_state import LogData
+from ..config import datadog_config
+from ..models.error_analysis_state import LogData
 from datetime import datetime
 import logging
 

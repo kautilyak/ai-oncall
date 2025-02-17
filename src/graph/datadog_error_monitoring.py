@@ -3,27 +3,34 @@ from typing import Optional, List
 from langgraph.graph import StateGraph, START, END
 from pydantic import Field, BaseModel
 
-from src.tools.error_analysis import analyze_error
-from src.tools.tool_selection import select_tools
+
 from datetime import datetime, timedelta
-from src.tools.datadog_integration import get_all_errors, fetch_past_error_logs, fetch_logs_by_trace_id
+from src.tools.datadog_integration import DatadogLogFetcher
 from src.models.error_analysis_state import ErrorAnalysisInput, ErrorAnalysisOutput
+from src.tools.error_analysis import analyze_error
+
+from src.tools.tool_selection import select_tools
 
 
 class AnalysisState(BaseModel):
-    selected_tools: List[str] = Field(description="List of selected tools")
+    """State model for error analysis workflow."""
+    selected_tools: List[str] = Field(default_factory=list, description="List of selected tools")
     error_code: str = Field(description="Error code")
     error_message: str = Field(description="Error message")
-    stack_trace: str = Field(description="Stack trace")
-    trace_id: Optional[str] = Field(description="Trace ID")
-    related_logs: str = Field(description="Related logs", default=None)
-    api_docs: str = Field(description="Business Error Relevant Info / API docs", default=None)
-    analysis_output: Optional[ErrorAnalysisOutput] = None
+    stack_trace: Optional[str] = Field(default=None, description="Stack trace")
+    service: Optional[str] = Field(default=None, description="Service name")
+    trace_id: Optional[str] = Field(default=None, description="Trace ID")
+    related_logs: List[dict] = Field(default_factory=list, description="Related logs")
+    service_docs: Optional[dict] = Field(default=None, description="Service documentation")
+    analysis_output: Optional[ErrorAnalysisOutput] = Field(default=None)
 
 
 TASK_DESCRIPTION = """
-Fetching Datadog Logs and API Docs to resolve the error incident.
+Analyze error incidents using Datadog logs and service documentation.
 """
+
+# Initialize clients
+datadog_client = DatadogLogFetcher()
 
 
 # Declare all nodes
@@ -36,31 +43,52 @@ def tool_selection(state: AnalysisState) -> AnalysisState:
 def gather_datadog_logs(state: AnalysisState) -> AnalysisState:
     """Gather logs from Datadog if selected"""
     if "datadog" in state.selected_tools:
-        to_time = int(datetime.now().timestamp())
-        from_time = int((datetime.now() - timedelta(days=1)).timestamp())
-        related_logs = fetch_logs_by_trace_id(trace_id=state.trace_id)
-        state.recent_logs = related_logs.get('logs', '')
+        try:
+            # Fetch logs by trace ID if available
+            if state.trace_id:
+                logs = datadog_client.fetch_logs_by_trace_id(
+                    trace_id=state.trace_id,
+                    hours=1
+                )
+                if logs:
+                    state.related_logs = [log.dict() for log in logs]
+            
+            # If no trace ID or no logs found, fetch recent error logs
+            if not state.related_logs:
+                logs = datadog_client.fetch_past_error_logs_and_store(hours=24)
+                if logs:
+                    state.related_logs = [log.dict() for log in logs]
+                    
+            # Extract service name if not provided
+            if not state.service and state.related_logs:
+                state.service = state.related_logs[0].get('service')
+                
+        except Exception as e:
+            print(f"Error gathering Datadog logs: {e}")
+    
     return state
 
 
-# todo
-def gather_api_docs(state: AnalysisState) -> AnalysisState:
-    """Gather API documentation if selected"""
-    if "api_docs" in state.selected_tools:
-        state.api_docs = "Relevant API documentation content."
-    return state
+def gather_service_docs(state: AnalysisState) -> AnalysisState:
+    """Gather service documentation if selected"""
+    pass
 
 
 def perform_analysis(state: AnalysisState) -> AnalysisState:
     """Perform error analysis"""
-    error_analysis_input = ErrorAnalysisInput(
-        error_message=state.error_message,
-        stack_trace=state.stack_trace,
-        trace_id=state.trace_id,
-        related_logs=state.related_logs,
-        api_docs=state.api_docs
-    )
-    state.analysis_output = analyze_error(error_analysis_input)
+    try:
+        error_analysis_input = ErrorAnalysisInput(
+            error_message=state.error_message,
+            stack_trace=state.stack_trace,
+            trace_id=state.trace_id,
+            service=state.service,
+            related_logs=state.related_logs,
+            service_docs=state.service_docs
+        )
+        state.analysis_output = analyze_error(error_analysis_input)
+    except Exception as e:
+        print(f"Error performing analysis: {e}")
+        
     return state
 
 
@@ -68,18 +96,17 @@ def perform_analysis(state: AnalysisState) -> AnalysisState:
 dd_error_monitoring_workflow = StateGraph(AnalysisState)
 
 # Add nodes to the graph
-dd_error_monitoring_workflow.add_node("start", START)
 dd_error_monitoring_workflow.add_node("tool_selection", tool_selection)
 dd_error_monitoring_workflow.add_node("gather_datadog", gather_datadog_logs)
-dd_error_monitoring_workflow.add_node("gather_api_docs", gather_api_docs)
+dd_error_monitoring_workflow.add_node("gather_service_docs", gather_service_docs)
 dd_error_monitoring_workflow.add_node("analysis", perform_analysis)
-dd_error_monitoring_workflow.add_node("end", END)
+
 
 # Define the edges
 dd_error_monitoring_workflow.add_edge(START, "tool_selection")
 dd_error_monitoring_workflow.add_edge("tool_selection", "gather_datadog")
-dd_error_monitoring_workflow.add_edge("gather_datadog", "gather_api_docs")
-dd_error_monitoring_workflow.add_edge("gather_api_docs", "analysis")
+dd_error_monitoring_workflow.add_edge("gather_datadog", "gather_service_docs")
+dd_error_monitoring_workflow.add_edge("gather_service_docs", "analysis")
 dd_error_monitoring_workflow.add_edge("analysis", END)
 
 # Compile the graph

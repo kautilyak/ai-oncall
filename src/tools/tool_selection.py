@@ -6,7 +6,7 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 
 # Initialize the LLM
-llm = ChatOllama(model_name="llama3.2", temperature=0)
+llm = ChatOllama(model="llama3.2", temperature=0)
 
 # Define the prompt template for tool selection
 prompt_template = PromptTemplate(
@@ -24,7 +24,7 @@ prompt_template = PromptTemplate(
 )
 
 # Create the LLMChain for tool selection
-tool_selection_chain = LLMChain(llm=llm, prompt=prompt_template)
+tool_selection_chain = llm | prompt_template
 
 
 def select_tools(task_description: str) -> List[str]:
@@ -38,7 +38,7 @@ def select_tools(task_description: str) -> List[str]:
         List[str]: A list of selected tools to address the query.
     """
     # Run the tool selection chain
-    tool_selection_response = tool_selection_chain.invoke(task_description=task_description)
+    tool_selection_response = tool_selection_chain.invoke(task_description)
 
     # Parse the response to extract selected tools
     selected_tools = []
