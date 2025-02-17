@@ -48,7 +48,7 @@ def gather_datadog_logs(state: AnalysisState) -> AnalysisState:
             if state.trace_id:
                 logs = datadog_client.fetch_logs_by_trace_id(
                     trace_id=state.trace_id,
-                    hours=1
+                    hours=72
                 )
                 if logs:
                     state.related_logs = [log.dict() for log in logs]
@@ -78,6 +78,7 @@ def perform_analysis(state: AnalysisState) -> AnalysisState:
     """Perform error analysis"""
     try:
         error_analysis_input = ErrorAnalysisInput(
+            error_code=state.error_code,
             error_message=state.error_message,
             stack_trace=state.stack_trace,
             trace_id=state.trace_id,

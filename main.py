@@ -35,17 +35,22 @@ def process_error(error_query: ErrorQuery):
 
     # Output the analysis
     print("Error Analysis and Suggested Resolutions:")
-    print(final_state.analysis_output)
+    print(final_state.get("analysis_output"))
 
 
 if __name__ == "__main__":
     
 
-    error_code = questionary.text("Please enter the error code:").ask()
-    error_message = questionary.text("Please enter the error message:").ask()
-    stack_trace = questionary.text("Please enter the stack trace (optional):", default="").ask()
-    service = questionary.text("Please enter the service name (optional):", default="").ask()
-    trace_id = questionary.text("Please enter the trace ID for Datadog logs (optional):", default="").ask()
+    # error_code = questionary.text("Please enter the error code:").ask()
+    # error_message = questionary.text("Please enter the error message:").ask()
+    # stack_trace = questionary.text("Please enter the stack trace (optional):", default="").ask()
+    # service = questionary.text("Please enter the service name (optional):", default="").ask()
+    # trace_id = questionary.text("Please enter the trace ID for Datadog logs (optional):", default="").ask()
+    error_code = "ETIMEDOUT"
+    error_message = "Connection timed out"
+    stack_trace = "Traceback (most recent call last):\n  File \"network.py\", line 15, in <module>\n    connect_to_service()\n  File \"network.py\", line 8, in connect_to_service\n    raise TimeoutError('Connection timed out')"
+    service = "api_service"
+    trace_id = "xyz789"
 
     error_query = ErrorQuery(
         code=error_code,

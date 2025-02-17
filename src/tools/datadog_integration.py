@@ -61,7 +61,7 @@ class DatadogLogFetcher:
                 response = api_instance.list_logs(
                     body=LogsListRequest(
                         filter=filter,
-                        sort=LogsSort("timestamp")
+                        # sort=LogsSort("timestamp")
                     )
                 )
                 return [
